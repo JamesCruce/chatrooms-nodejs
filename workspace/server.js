@@ -1,84 +1,54 @@
-//
-// # SimpleServer
-//
-// A simple chat server using Socket.IO, Express, and Async.
-//
-var http = require('http');
+var http = require('https');
+var fs = require('fs');
 var path = require('path');
+var mime = require('mime');
+var cache = {};
 
-var async = require('async');
-var socketio = require('socket.io');
-var express = require('express');
-
-//
-// ## SimpleServer `SimpleServer(obj)`
-//
-// Creates a new instance of SimpleServer with the following options:
-//  * `port` - The HTTP port to listen on. If `process.env.PORT` is set, _it overrides this value_.
-//
-var router = express();
-var server = http.createServer(router);
-var io = socketio.listen(server);
-
-router.use(express.static(path.resolve(__dirname, 'client')));
-var messages = [];
-var sockets = [];
-
-io.on('connection', function (socket) {
-    messages.forEach(function (data) {
-      socket.emit('message', data);
-    });
-
-    sockets.push(socket);
-
-    socket.on('disconnect', function () {
-      sockets.splice(sockets.indexOf(socket), 1);
-      updateRoster();
-    });
-
-    socket.on('message', function (msg) {
-      var text = String(msg || '');
-
-      if (!text)
-        return;
-
-      socket.get('name', function (err, name) {
-        var data = {
-          name: name,
-          text: text
-        };
-
-        broadcast('message', data);
-        messages.push(data);
-      });
-    });
-
-    socket.on('identify', function (name) {
-      socket.set('name', String(name || 'Anonymous'), function (err) {
-        updateRoster();
-      });
-    });
-  });
-
-function updateRoster() {
-  async.map(
-    sockets,
-    function (socket, callback) {
-      socket.get('name', callback);
-    },
-    function (err, names) {
-      broadcast('roster', names);
-    }
-  );
+function send404(response){
+	response.writeHead(404, {'content-type': 'text/plain'});
+	response.write('Error 404: resource not found.');
+	response.end();
 }
 
-function broadcast(event, data) {
-  sockets.forEach(function (socket) {
-    socket.emit(event, data);
-  });
+function sendFile(response, filePath, fileContents){
+	response.writeHead(200, 
+		{"content-type": mime.lookup(path.basename(filePath))
+	});
+	response.end(fileContents);
 }
 
-server.listen(process.env.PORT || 3000, process.env.IP || "0.0.0.0", function(){
-  var addr = server.address();
-  console.log("Chat server listening at", addr.address + ":" + addr.port);
+function serverStatic(response, cache, absPath){
+	if(cache[absPath]){
+		sendFile(response, absPath, cache[absPath]);
+	}else{
+		fs.exists(absPath, function(exists){
+			if(exists){
+				fs.readFile(absPath, function(err, data){
+					if(err){
+						send404(response);
+					}else{
+						cache[absPath] = data;
+						sendFile(response, absPath, data);
+					}
+				});
+			}else{
+				send404(response);
+			}
+		});
+	}
+}
+
+var server = http.createServer(function(request, response){
+	var filePath = false;
+	if (request.url == '/'){
+		filePath = 'public/index.html';
+	}else{
+		filePath = 'public' + request.url;
+	}
+	var absPath = './' + filePath;
+	serverStatic(response, cache, absPath);
+});
+
+server.listen(3000, function(){
+	console.log("Server listening on port 3000.");
 });
