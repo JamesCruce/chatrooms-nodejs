@@ -1,0 +1,13 @@
+[user]
+    name = JamesCruce
+    email = jcruce42013@gmail.com
+[core]
+    editor = nano
+    whitespace = off
+    excludesfile = ~/.gitignore
+[advice]
+    statusuoption = false
+[color]
+    ui = true
+[push]
+    default = current
